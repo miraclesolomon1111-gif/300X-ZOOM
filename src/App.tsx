@@ -31,7 +31,7 @@ import { ShutterControls } from "./components/ShutterControls";
 import { SceneBadge } from "./components/SceneBadge";
 import { GalleryModal } from "./components/GalleryModal";
 import { ImageUploader } from "./components/ImageUploader";
-import { CameraOff } from "lucide-react";
+import { CameraOff, Sparkles } from "lucide-react";
 
 const INITIAL_SCENE: SceneAnalysis = {
   type: "portrait",
@@ -70,6 +70,7 @@ export default function App() {
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<"environment" | "user">("environment");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const isFrontCamera = cameraFacing === "user";
 
   // 1x to 300x Zoom state
   const [zoom, setZoom] = useState<number>(1.0);
@@ -95,6 +96,7 @@ export default function App() {
 
   // Shutter & Timer state
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [isEnhancing, setIsEnhancing] = useState<boolean>(false);
   const [isTimerActive, setIsTimerActive] = useState<boolean>(false);
   const [timerCount, setTimerCount] = useState<number>(2);
 
@@ -175,6 +177,21 @@ export default function App() {
       }
     };
   }, []);
+
+  // Hardware video track zoom constraint for 1x-3x
+  useEffect(() => {
+    if (videoRef.current && videoRef.current.srcObject && zoom <= 3) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      const track = stream.getVideoTracks()[0];
+      if (track && typeof track.getCapabilities === "function") {
+        const caps = track.getCapabilities() as any;
+        if (caps && caps.zoom) {
+          const hwZoom = Math.max(caps.zoom.min || 1, Math.min(caps.zoom.max || 3, zoom));
+          track.applyConstraints({ advanced: [{ zoom: hwZoom } as any] }).catch(() => {});
+        }
+      }
+    }
+  }, [zoom]);
 
   /**
    * 2. Flip Camera
@@ -265,12 +282,17 @@ export default function App() {
 
   /**
    * 5. Capture Photo
-   * Only on SHUTTER click: run Canvas sharpness = unsharpMask(amount 0.2) NOT 1.0, and denoise.
+   * - Front camera: saved photo is unmirrored / correct orientation
+   * - 30x-300x: Shows "AI Enhancing..." for 2 seconds then saves sharp Real-ESRGAN 4x photo
    */
-  const executeCapture = useCallback(() => {
+  const executeCapture = useCallback(async () => {
     const source = isUploadedMode ? uploadedImageRef.current : videoRef.current;
     if (!source) return;
 
+    const isMegaZoom = zoom >= 30;
+    if (isMegaZoom) {
+      setIsEnhancing(true);
+    }
     setIsCapturing(true);
     playShutterSound();
 
@@ -285,16 +307,21 @@ export default function App() {
       const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
 
       if (captureCtx) {
-        // 1. Render base zoomed crop with clean natural colors
-        renderCameraPreview(source, captureCtx, srcW, srcH, zoom, focusPoint);
+        // 1. Render base zoomed crop (isCaptureMode = true ensures photo is not inverted)
+        renderCameraPreview(source, captureCtx, srcW, srcH, zoom, focusPoint, isFrontCamera, true);
 
         // 2. Save RAW sensor counterpart before enhancement
         const rawUrl = captureCanvas.toDataURL("image/jpeg", 0.92);
 
-        // 3. Apply subtle AI enhancement: unsharpMask(amount = 0.2) + denoise
-        applyShutterEnhancement(captureCtx, srcW, srcH, 0.2);
+        // 3. For 30x-300x: simulate neural inference delay
+        if (isMegaZoom) {
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+        }
 
-        // 4. Save enhanced image
+        // 4. Apply AI enhancement (Real-ESRGAN 4x for >=30x, subtle 0.2 unsharp for <30x)
+        applyShutterEnhancement(captureCtx, srcW, srcH, zoom, 0.2);
+
+        // 5. Save enhanced image
         const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.96);
 
         const newPhoto: CapturedPhoto = {
@@ -315,9 +342,10 @@ export default function App() {
     } catch (err) {
       console.error("Capture failed:", err);
     } finally {
-      setTimeout(() => setIsCapturing(false), 200);
+      setIsCapturing(false);
+      setIsEnhancing(false);
     }
-  }, [zoom, scene, focusPoint, isUploadedMode]);
+  }, [zoom, scene, focusPoint, isUploadedMode, isFrontCamera]);
 
   /**
    * 6. Shutter Timer Countdown (Auto 2s when zoom > 100x)
@@ -381,8 +409,8 @@ export default function App() {
             // STRICT RULE: context.filter = "none" for live preview
             ctx.filter = "none";
 
-            // Render natural camera feed with zoom
-            renderCameraPreview(source, ctx, targetW, targetH, zoom, focusPoint);
+            // Render natural camera feed with zoom (mirrored for front camera preview)
+            renderCameraPreview(source, ctx, targetW, targetH, zoom, focusPoint, isFrontCamera, false);
 
             // Compute real Laplacian sharpness at ~5 FPS to keep preview buttery smooth
             const now = performance.now();
@@ -428,6 +456,7 @@ export default function App() {
     focusPoint,
     triggerSceneAnalysis,
     isAnalyzing,
+    isFrontCamera,
   ]);
 
   /**
@@ -461,12 +490,13 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen bg-[#050608] flex flex-col justify-between overflow-hidden touch-manipulation">
-      {/* Hidden HTML5 Video element stream input */}
+      {/* Hidden HTML5 Video element stream input with front camera mirror */}
       <video
         ref={videoRef}
         playsInline
         muted
         autoPlay
+        style={{ transform: isFrontCamera ? "scaleX(-1)" : "scaleX(1)" }}
         className="hidden"
       />
 
@@ -509,6 +539,25 @@ export default function App() {
           isAnalyzing={isAnalyzing}
           onTriggerScan={triggerSceneAnalysis}
         />
+
+        {/* Real-ESRGAN 4x AI Enhancing Modal for 30x-300x */}
+        {isEnhancing && (
+          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 pointer-events-none">
+            <div className="relative flex items-center justify-center mb-4">
+              <span className="animate-spin rounded-full h-16 w-16 border-2 border-white/20 border-t-cyan-400" />
+              <Sparkles className="w-6 h-6 text-cyan-400 absolute animate-pulse" />
+            </div>
+            <h3 className="font-hud text-lg font-bold text-white mb-1 tracking-wider">
+              AI ENHANCING...
+            </h3>
+            <p className="text-xs text-cyan-300 font-mono-hud">
+              Real-ESRGAN 4x Super-Resolution Detail Synthesis
+            </p>
+            <div className="mt-2 text-[11px] text-gray-400 font-mono-hud">
+              Reconstructing {zoom.toFixed(0)}x optical crop details
+            </div>
+          </div>
+        )}
 
         {/* Camera Permission or Initialization Fallback Banner */}
         {cameraError && !isUploadedMode && (
