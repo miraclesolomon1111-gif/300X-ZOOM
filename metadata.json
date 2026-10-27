@@ -1,0 +1,10 @@
+{
+  "name": "AI Clear Cam 300x",
+  "description": "Ultra AI camera with 1x-300x mega zoom, real-time unblur, auto portrait bokeh, intelligent background arrange, and Gemini Vision scene detection.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
