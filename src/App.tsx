@@ -1,26 +1,27 @@
 /**
  * AI Clear Cam 300x
  * Main Application Core
- * CORE RULE: AI IS THE CAMERA - ALWAYS ON FROM THE SECOND CAMERA OPENS
+ * - 100% Real, Natural Phone Camera Preview (context.filter = "none")
+ * - Subtle AI Enhancement on Shutter: unsharpMask(amount = 0.2) + denoise
+ * - Real Laplacian Sharpness Calculation
+ * - 1x to 300x Mega Zoom
  */
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   SceneAnalysis,
-  FilterState,
   CapturedPhoto,
 } from "./types/camera";
 import {
-  detectBlur,
-  renderZoomedCrop,
-  applyAIEnhancementPipeline,
+  calculateRealSharpness,
+  renderCameraPreview,
+  applyShutterEnhancement,
 } from "./utils/cvEngine";
 import {
   playShutterSound,
   playTimerBeep,
   playFocusLockSound,
   setSoundMuted,
-  getSoundMuted,
 } from "./utils/audio";
 import { ViewfinderHUD } from "./components/ViewfinderHUD";
 import { ZoomControl } from "./components/ZoomControl";
@@ -28,40 +29,30 @@ import { ShutterControls } from "./components/ShutterControls";
 import { SceneBadge } from "./components/SceneBadge";
 import { GalleryModal } from "./components/GalleryModal";
 import { ImageUploader } from "./components/ImageUploader";
-import { Camera, CameraOff, AlertCircle } from "lucide-react";
-
-const DEFAULT_FILTERS: FilterState = {
-  brightness: 1.08,
-  contrast: 1.12,
-  sharpness: 40,
-  saturation: 1.15,
-  bokehRadius: 14,
-  denoiseLevel: 35,
-  colorTemp: 0,
-};
+import { CameraOff } from "lucide-react";
 
 const INITIAL_SCENE: SceneAnalysis = {
   type: "portrait",
   isBlurry: false,
-  blurScore: 15,
+  blurScore: 18,
   lighting: "normal",
   confidence: 0.94,
-  detectedSubject: "Face & Subject Detected",
+  detectedSubject: "Focal Subject",
   appliedEnhancements: [
-    "Real-ESRGAN Deblur Core",
-    "Auto Portrait DSLR Bokeh",
-    "Neural Eye & Edge Sharpening",
+    "Subtle Edge Unsharp (0.2x)",
+    "Sensor Denoise",
+    "Natural Color Fidelity",
   ],
   recommendedFilters: {
-    brightness: 1.1,
-    contrast: 1.12,
-    sharpness: 45,
-    saturation: 1.12,
-    bokehRadius: 18,
-    denoiseLevel: 30,
-    colorTemp: 2,
+    brightness: 1.0,
+    contrast: 1.0,
+    sharpness: 20,
+    saturation: 1.0,
+    bokehRadius: 0,
+    denoiseLevel: 20,
+    colorTemp: 0,
   },
-  aiFeedback: "Portrait Detected - Background Blurred",
+  aiFeedback: "Natural Camera Active - AI Ready on Shutter",
 };
 
 export default function App() {
@@ -81,13 +72,12 @@ export default function App() {
   // 1x to 300x Zoom state
   const [zoom, setZoom] = useState<number>(1.0);
 
-  // Optical & AI Filters state
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  // AI Scene detection state
   const [scene, setScene] = useState<SceneAnalysis>(INITIAL_SCENE);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Blur & telemetry metrics
-  const [sharpnessScore, setSharpnessScore] = useState<number>(85);
+  // Blur & telemetry metrics (REAL calculation)
+  const [sharpnessScore, setSharpnessScore] = useState<number>(68);
   const [isBlurry, setIsBlurry] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
 
@@ -114,13 +104,14 @@ export default function App() {
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [isUploadedMode, setIsUploadedMode] = useState<boolean>(false);
 
-  // Track FPS calculation
+  // Track FPS & metric calculation cadence
   const frameCountRef = useRef(0);
   const lastFpsTimeRef = useRef(performance.now());
+  const lastMetricsTimeRef = useRef(0);
   const lastAnalysisTimeRef = useRef(0);
 
   /**
-   * 1. Initialize Camera (Always-On AI Camera)
+   * 1. Initialize Camera (Clean Real Phone Camera Stream)
    */
   const startCamera = useCallback(async (facingMode = cameraFacing) => {
     try {
@@ -155,7 +146,6 @@ export default function App() {
           ? "Camera permission denied. Please allow camera access in your browser or upload an image."
           : "Unable to access camera device. Falling back to sample photo mode."
       );
-      // Auto-load benchmark sample if device camera fails
       loadDefaultSample();
     }
   }, [cameraFacing]);
@@ -171,7 +161,6 @@ export default function App() {
     sampleImg.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=80";
   };
 
-  // Start camera on mount
   useEffect(() => {
     startCamera();
     return () => {
@@ -205,7 +194,6 @@ export default function App() {
     try {
       setIsAnalyzing(true);
 
-      // Create downsampled snapshot for fast transmission
       const snapCanvas = document.createElement("canvas");
       snapCanvas.width = 480;
       snapCanvas.height = Math.round((480 * canvas.height) / canvas.width);
@@ -225,14 +213,6 @@ export default function App() {
 
       const data: SceneAnalysis = await res.json();
       setScene(data);
-
-      // Auto apply recommended filters smoothly
-      if (data.recommendedFilters) {
-        setFilters((prev) => ({
-          ...prev,
-          ...data.recommendedFilters,
-        }));
-      }
     } catch (err) {
       console.error("Gemini analysis error:", err);
     } finally {
@@ -241,7 +221,7 @@ export default function App() {
   }, [isAnalyzing]);
 
   /**
-   * 4. Viewfinder Tap (Tap to Focus & Target Subject)
+   * 4. Viewfinder Tap (Tap to set focal point)
    */
   const handleViewfinderTap = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -255,58 +235,60 @@ export default function App() {
     setIsFocusLocked(true);
     playFocusLockSound();
 
-    // Trigger AI Scene re-analysis on focal tap
-    setTimeout(() => {
-      triggerSceneAnalysis();
-    }, 200);
-
-    // Release focus locked status after 2.5s
     setTimeout(() => {
       setIsFocusLocked(false);
-    }, 2500);
+    }, 1500);
   };
 
   /**
-   * 5. Capture Photo with HD EXIF stamp
+   * 5. Capture Photo
+   * Only on SHUTTER click: run Canvas sharpness = unsharpMask(amount 0.2) NOT 1.0, and denoise.
    */
   const executeCapture = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const source = isUploadedMode ? uploadedImageRef.current : videoRef.current;
+    if (!source) return;
 
     setIsCapturing(true);
     playShutterSound();
 
     try {
-      // 1. Get current AI enhanced render
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const srcW = (source as HTMLVideoElement).videoWidth || (source as HTMLImageElement).naturalWidth || source.width || 1280;
+      const srcH = (source as HTMLVideoElement).videoHeight || (source as HTMLImageElement).naturalHeight || source.height || 720;
 
-      // 2. Generate RAW sensor counterpart for comparison
-      const rawCanvas = document.createElement("canvas");
-      rawCanvas.width = canvas.width;
-      rawCanvas.height = canvas.height;
-      const rawCtx = rawCanvas.getContext("2d");
-      if (rawCtx) {
-        const source = isUploadedMode ? uploadedImageRef.current : videoRef.current;
-        if (source) {
-          renderZoomedCrop(source, rawCtx, canvas.width, canvas.height, zoom, focusPoint);
-        }
+      // Create high-resolution capture canvas
+      const captureCanvas = document.createElement("canvas");
+      captureCanvas.width = srcW;
+      captureCanvas.height = srcH;
+      const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
+
+      if (captureCtx) {
+        // 1. Render base zoomed crop with clean natural colors
+        renderCameraPreview(source, captureCtx, srcW, srcH, zoom, focusPoint);
+
+        // 2. Save RAW sensor counterpart before enhancement
+        const rawUrl = captureCanvas.toDataURL("image/jpeg", 0.92);
+
+        // 3. Apply subtle AI enhancement: unsharpMask(amount = 0.2) + denoise
+        applyShutterEnhancement(captureCtx, srcW, srcH, 0.2);
+
+        // 4. Save enhanced image
+        const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.96);
+
+        const newPhoto: CapturedPhoto = {
+          id: `photo_${Date.now()}`,
+          timestamp: Date.now(),
+          dataUrl,
+          rawUrl,
+          zoomLevel: zoom,
+          scene: { ...scene },
+          resolution: { width: srcW, height: srcH },
+          iso: 100,
+          shutterSpeed: zoom > 100 ? "1/1000s" : "1/250s",
+          fNumber: "f/1.8",
+        };
+
+        setGallery((prev) => [newPhoto, ...prev]);
       }
-      const rawUrl = rawCanvas.toDataURL("image/jpeg", 0.85);
-
-      const newPhoto: CapturedPhoto = {
-        id: `photo_${Date.now()}`,
-        timestamp: Date.now(),
-        dataUrl,
-        rawUrl,
-        zoomLevel: zoom,
-        scene: { ...scene },
-        resolution: { width: canvas.width, height: canvas.height },
-        iso: 100,
-        shutterSpeed: zoom > 100 ? "1/1000s" : "1/250s",
-        fNumber: scene.type === "portrait" ? "f/1.4" : "f/2.8",
-      };
-
-      setGallery((prev) => [newPhoto, ...prev]);
     } catch (err) {
       console.error("Capture failed:", err);
     } finally {
@@ -341,7 +323,7 @@ export default function App() {
   };
 
   /**
-   * 7. Master Render Loop (60 FPS AI Pipeline)
+   * 7. Master Render Loop: Pure Natural Camera Preview (context.filter = "none")
    */
   useEffect(() => {
     let isRunning = true;
@@ -352,7 +334,6 @@ export default function App() {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       const uploadedImg = uploadedImageRef.current;
-
       const source = isUploadedMode ? uploadedImg : video;
 
       if (canvas && source) {
@@ -360,7 +341,6 @@ export default function App() {
         const srcH = (source as HTMLVideoElement).videoHeight || (source as HTMLImageElement).naturalHeight || source.height;
 
         if (srcW && srcH) {
-          // Adjust canvas internal resolution to viewport
           const displayW = canvas.clientWidth || 800;
           const displayH = canvas.clientHeight || 1000;
           const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -375,47 +355,32 @@ export default function App() {
 
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
           if (ctx) {
-            // 1. Render 1x-300x Zoom Crop
-            renderZoomedCrop(source, ctx, targetW, targetH, zoom, focusPoint);
+            // STRICT RULE: context.filter = "none" for live preview
+            ctx.filter = "none";
 
-            // 2. Real-Time Blur Detection
-            const imgData = ctx.getImageData(0, 0, targetW, targetH);
-            const stats = detectBlur(imgData);
-            setSharpnessScore(100 - stats.blurScore);
-            setIsBlurry(stats.isBlurry);
+            // Render natural camera feed with zoom
+            renderCameraPreview(source, ctx, targetW, targetH, zoom, focusPoint);
 
-            // Auto scene heuristic upgrade if face detected
-            if (stats.hasFaceHeuristic && scene.type !== "portrait") {
-              setScene((prev) => ({
-                ...prev,
-                type: "portrait",
-                aiFeedback: "Portrait Detected - Background Blurred",
-              }));
+            // Compute real Laplacian sharpness at ~5 FPS to keep preview buttery smooth
+            const now = performance.now();
+            if (now - lastMetricsTimeRef.current > 200) {
+              lastMetricsTimeRef.current = now;
+              const imgData = ctx.getImageData(0, 0, targetW, targetH);
+              const stats = calculateRealSharpness(imgData);
+              setSharpnessScore(stats.sharpnessScore);
+              setIsBlurry(stats.isBlurry);
             }
 
-            // 3. Apply AI Enhancement Pipeline
-            applyAIEnhancementPipeline(
-              ctx,
-              targetW,
-              targetH,
-              filters,
-              zoom,
-              scene.type,
-              focusPoint,
-              showSplitCompare ? splitRatio : null
-            );
-
-            // 4. Track FPS
+            // Track FPS
             frameCountRef.current++;
-            const now = performance.now();
             if (now - lastFpsTimeRef.current >= 1000) {
               setFps(frameCountRef.current);
               frameCountRef.current = 0;
               lastFpsTimeRef.current = now;
             }
 
-            // 5. Periodic Gemini Vision Scene Detection (~every 5 seconds)
-            if (now - lastAnalysisTimeRef.current > 5000 && !isAnalyzing) {
+            // Periodic Gemini Vision Scene Detection (~every 8s)
+            if (now - lastAnalysisTimeRef.current > 8000 && !isAnalyzing) {
               lastAnalysisTimeRef.current = now;
               triggerSceneAnalysis();
             }
@@ -438,23 +403,18 @@ export default function App() {
     isUploadedMode,
     zoom,
     focusPoint,
-    filters,
-    scene.type,
-    showSplitCompare,
-    splitRatio,
     triggerSceneAnalysis,
     isAnalyzing,
   ]);
 
   /**
-   * 8. Handlers for Image Upload & Sample Test
+   * 8. Handlers for Image Upload & Return to Live
    */
   const handleImageUploaded = (img: HTMLImageElement) => {
     uploadedImageRef.current = img;
     setIsUploadedMode(true);
     setCameraActive(true);
     setZoom(1.0);
-    // Force immediate scene diagnosis on upload
     setTimeout(() => {
       triggerSceneAnalysis();
     }, 150);
@@ -489,13 +449,13 @@ export default function App() {
 
       {/* Main Viewfinder Stage */}
       <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-black">
-        {/* Real-Time AI Canvas Surface */}
+        {/* Real-Time Camera Canvas (Natural Color, context.filter = 'none') */}
         <canvas
           ref={canvasRef}
           className="w-full h-full object-cover select-none pointer-events-none"
         />
 
-        {/* Viewfinder HUD Overlays */}
+        {/* Clean Viewfinder HUD (No neon blue AF-C box) */}
         <ViewfinderHUD
           scene={scene}
           fps={fps}
@@ -538,7 +498,7 @@ export default function App() {
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={() => startCamera()}
-                className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-hud font-bold text-xs shadow-lg shadow-cyan-500/30 transition-all"
+                className="px-5 py-2.5 rounded-xl bg-white text-black font-hud font-bold text-xs shadow-md transition-all"
               >
                 Retry Camera
               </button>

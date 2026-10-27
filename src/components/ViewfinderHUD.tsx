@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Volume2, VolumeX, Zap, Grid, Sliders, Crosshair, Sparkles, AlertCircle } from "lucide-react";
+import { Volume2, VolumeX, Grid } from "lucide-react";
 import { SceneAnalysis } from "../types/camera";
 
 interface Props {
@@ -38,7 +38,6 @@ export const ViewfinderHUD: React.FC<Props> = ({
   showSplitCompare,
   splitRatio,
   onSplitRatioChange,
-  hasCameraError,
   isUploadedImage,
 }) => {
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
@@ -74,22 +73,22 @@ export const ViewfinderHUD: React.FC<Props> = ({
       onPointerLeave={handlePointerUp}
     >
       {/* Top Telemetry & Controls Bar */}
-      <div className="flex items-center justify-between px-3 pt-3 pb-1 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-auto">
+      <div className="flex items-center justify-between px-3 pt-3 pb-1 bg-gradient-to-b from-black/70 via-black/30 to-transparent pointer-events-auto">
         {/* Brand Optic Badge (MZ) */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-black font-black text-sm tracking-tighter shadow-md shadow-cyan-500/30">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-white font-black text-xs tracking-tighter border border-white/20">
             MZ
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-hud font-bold text-xs tracking-wider text-white">CLEAR CAM</span>
-              <span className="font-hud text-[10px] font-black px-1 rounded bg-red-600 text-white tracking-widest">
+              <span className="font-hud text-[10px] font-bold px-1 rounded bg-white/20 text-white tracking-wider">
                 300X
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[9px] font-mono-hud text-cyan-400">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>AI ALWAYS ON</span>
+            <div className="flex items-center gap-1 text-[9px] font-mono-hud text-gray-300">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>REAL CAMERA FEED</span>
               {isUploadedImage && <span className="text-amber-400">• PHOTO MODE</span>}
             </div>
           </div>
@@ -97,10 +96,12 @@ export const ViewfinderHUD: React.FC<Props> = ({
 
         {/* Real-Time Telemetry HUD */}
         <div className="hidden sm:flex items-center gap-3 text-[10px] font-mono-hud text-gray-300 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-          <div><span className="text-gray-400">F/</span>1.4</div>
-          <div><span className="text-gray-400">SS</span> 1/250</div>
-          <div><span className="text-gray-400">ISO</span> 100</div>
-          <div><span className="text-cyan-400">{fps}</span> FPS</div>
+          <div><span className="text-gray-400">ZOOM</span> {zoom.toFixed(1)}x</div>
+          <div><span className="text-gray-400">FPS</span> {fps}</div>
+          <div>
+            <span className="text-gray-400">SHARPNESS</span>{" "}
+            <span className="text-emerald-400 font-semibold">{sharpnessScore}%</span>
+          </div>
         </div>
 
         {/* Quick Utility Toggles */}
@@ -112,7 +113,7 @@ export const ViewfinderHUD: React.FC<Props> = ({
             }}
             className={`p-2 rounded-full backdrop-blur-md border transition-all ${
               showGrid
-                ? "bg-cyan-500 text-black border-cyan-400"
+                ? "bg-white text-black border-white"
                 : "bg-black/50 text-gray-400 border-white/10 hover:text-white"
             }`}
             title="Toggle Grid & Level"
@@ -139,69 +140,44 @@ export const ViewfinderHUD: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Viewfinder Center Optics (Grid, Reticle, Horizon) */}
+      {/* Viewfinder Center Optics (Subtle Grid, Minimal Focus Ring on Tap) */}
       <div className="relative flex-1 pointer-events-none flex items-center justify-center">
         {/* Rule-of-Thirds Grid */}
         {showGrid && (
-          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none">
-            <div className="border-r border-b border-white/10" />
-            <div className="border-r border-b border-white/10" />
-            <div className="border-b border-white/10" />
-            <div className="border-r border-b border-white/10" />
-            <div className="border-r border-b border-white/10" />
-            <div className="border-b border-white/10" />
-            <div className="border-r border-white/10" />
-            <div className="border-r border-white/10" />
+          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
+            <div className="border-r border-b border-white/15" />
+            <div className="border-r border-b border-white/15" />
+            <div className="border-b border-white/15" />
+            <div className="border-r border-b border-white/15" />
+            <div className="border-r border-b border-white/15" />
+            <div className="border-b border-white/15" />
+            <div className="border-r border-white/15" />
+            <div className="border-r border-white/15" />
             <div />
           </div>
         )}
 
-        {/* Optical Level Indicator (Center Artificial Horizon) */}
-        {showGrid && (
-          <div className="absolute flex items-center justify-center gap-12 opacity-60">
-            <div className="w-12 h-0.5 bg-cyan-400 shadow-sm shadow-cyan-400" />
-            <div className="w-2 h-2 rounded-full border border-cyan-400" />
-            <div className="w-12 h-0.5 bg-cyan-400 shadow-sm shadow-cyan-400" />
+        {/* Minimal Focus Ring on Tap (fades out, NO neon blue box) */}
+        {isFocusLocked && (
+          <div
+            className="absolute w-12 h-12 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 pointer-events-none transition-all duration-300 scale-90 animate-pulse"
+            style={{
+              left: `${focusPoint.x * 100}%`,
+              top: `${focusPoint.y * 100}%`,
+            }}
+          >
+            <div className="absolute inset-0 m-auto w-1 h-1 rounded-full bg-white/80" />
           </div>
         )}
 
-        {/* Interactive Focus Reticle */}
-        <div
-          className={`absolute w-20 h-20 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 pointer-events-none ${
-            isFocusLocked ? "scale-90" : "scale-100"
-          }`}
-          style={{
-            left: `${focusPoint.x * 100}%`,
-            top: `${focusPoint.y * 100}%`,
-          }}
-        >
-          {/* Reticle Brackets */}
-          <div className="absolute inset-0">
-            {/* Top-left */}
-            <div className={`absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 transition-colors ${isFocusLocked ? 'border-emerald-400' : 'border-cyan-400'}`} />
-            {/* Top-right */}
-            <div className={`absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 transition-colors ${isFocusLocked ? 'border-emerald-400' : 'border-cyan-400'}`} />
-            {/* Bottom-left */}
-            <div className={`absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 transition-colors ${isFocusLocked ? 'border-emerald-400' : 'border-cyan-400'}`} />
-            {/* Bottom-right */}
-            <div className={`absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 transition-colors ${isFocusLocked ? 'border-emerald-400' : 'border-cyan-400'}`} />
-            {/* Center dot */}
-            <div className={`absolute inset-0 m-auto w-1.5 h-1.5 rounded-full transition-colors ${isFocusLocked ? 'bg-emerald-400' : 'bg-cyan-400'}`} />
-          </div>
-
-          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-mono-hud text-cyan-300 bg-black/60 px-1.5 py-0.2 rounded border border-cyan-500/30">
-            {isFocusLocked ? "AI LOCK" : "AF-C TRACK"}
-          </div>
-        </div>
-
-        {/* Before / After Split Draggable Divider Overlay */}
+        {/* Before / After Split Draggable Divider Overlay (only active when user toggles compare) */}
         {showSplitCompare && (
           <div
             className="absolute top-0 bottom-0 pointer-events-auto cursor-ew-resize select-none"
             style={{ left: `${splitRatio * 100}%` }}
           >
-            <div className="absolute top-0 bottom-0 -left-px w-0.5 bg-gradient-to-b from-cyan-400 via-white to-cyan-400 shadow-[0_0_12px_#00F2FE]" />
-            <div className="absolute top-1/2 -left-4 -translate-y-1/2 w-8 h-8 rounded-full bg-cyan-400 text-black flex items-center justify-center font-bold text-xs shadow-lg shadow-cyan-400/50">
+            <div className="absolute top-0 bottom-0 -left-px w-0.5 bg-white shadow-sm" />
+            <div className="absolute top-1/2 -left-3.5 -translate-y-1/2 w-7 h-7 rounded-full bg-white text-black flex items-center justify-center font-bold text-[10px] shadow-lg">
               ◂ ▸
             </div>
           </div>
@@ -210,22 +186,22 @@ export const ViewfinderHUD: React.FC<Props> = ({
 
       {/* Viewfinder Bottom Status Overlay */}
       <div className="px-4 pb-2 flex items-center justify-between text-[11px] font-mono-hud text-gray-400 pointer-events-none">
-        {/* Sharpness & Blur Telemetry */}
-        <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+        {/* Real Sharpness Telemetry */}
+        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
           <span className="text-[10px] text-gray-400">SHARPNESS:</span>
-          <span className={`font-bold ${sharpnessScore > 60 ? 'text-emerald-400' : 'text-amber-400'}`}>
+          <span className="text-white font-semibold">
             {sharpnessScore}%
           </span>
           <span className="text-gray-500">|</span>
-          <span className={isBlurry ? 'text-amber-300 font-bold' : 'text-emerald-300'}>
-            {isBlurry ? 'DEBLUR ON' : 'STABLE'}
+          <span className={isBlurry ? "text-amber-300" : "text-emerald-400"}>
+            {isBlurry ? "STABILIZING" : "OPTIMAL"}
           </span>
         </div>
 
-        {/* Model Pipeline Tag */}
-        <div className="hidden xs:flex items-center gap-1 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[10px]">
-          <Sparkles className="w-3 h-3 text-cyan-400" />
-          <span>REAL-ESRGAN + GEMINI</span>
+        {/* Zoom indicator */}
+        <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[10px] text-gray-300">
+          <span>ZOOM:</span>
+          <span className="text-white font-bold">{zoom.toFixed(zoom < 10 ? 1 : 0)}x</span>
         </div>
       </div>
     </div>

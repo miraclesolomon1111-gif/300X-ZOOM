@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import { ZoomPreset } from "../types/camera";
 import { playZoomTick } from "../utils/audio";
-import { ShieldAlert, Zap } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 
 interface Props {
   zoom: number;
@@ -22,9 +22,7 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
   };
 
   // Convert linear slider position (0-100) to zoom scale (1-300x) via power curve
-  // sliderVal 0 = 1x, 25 = ~3x, 50 = 10x, 75 = ~50x, 100 = 300x
   const zoomToSlider = (z: number): number => {
-    // log scale: log10(1)=0, log10(300)=2.477
     const minLog = Math.log10(1);
     const maxLog = Math.log10(300);
     const currLog = Math.log10(Math.max(1, Math.min(300, z)));
@@ -36,7 +34,6 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
     const maxLog = Math.log10(300);
     const logVal = minLog + (s / 100) * (maxLog - minLog);
     const rawZ = Math.pow(10, logVal);
-    // Round smartly: 1-10 -> 1 decimal, 10-100 -> integer or 0.5, >100 -> integer
     if (rawZ < 10) return Math.round(rawZ * 10) / 10;
     if (rawZ < 100) return Math.round(rawZ);
     return Math.round(rawZ);
@@ -50,9 +47,9 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
   };
 
   const getZoomModeLabel = () => {
-    if (zoom <= 10) return { label: "OPTICAL SENSOR", tag: "1-10X REAL", color: "text-emerald-400" };
-    if (zoom <= 100) return { label: "AI UPSCALER 4X", tag: "NEURAL RESTORE", color: "text-cyan-400" };
-    return { label: "AI UPSCALER 8X + DEBLURGAN", tag: "EXTREME ULTRA", color: "text-amber-400" };
+    if (zoom <= 10) return { label: "CAMERA 1X - 10X", color: "text-white" };
+    if (zoom <= 100) return { label: "CLEAR ZOOM 10X - 100X", color: "text-gray-300" };
+    return { label: "MEGA ZOOM 100X - 300X", color: "text-amber-400" };
   };
 
   const mode = getZoomModeLabel();
@@ -62,8 +59,7 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
       {/* Zoom Mode Telemetry & Value Indicator */}
       <div className="flex items-center justify-between w-full max-w-md px-1 text-xs font-hud">
         <div className="flex items-center gap-1.5">
-          <Zap className={`w-3.5 h-3.5 ${mode.color}`} />
-          <span className={`font-bold tracking-wider ${mode.color}`}>
+          <span className={`font-semibold tracking-wider ${mode.color}`}>
             {mode.label}
           </span>
         </div>
@@ -72,7 +68,7 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
           <span className="text-xl font-bold font-hud text-white tracking-tight">
             {zoom.toFixed(zoom < 10 ? 1 : 0)}
           </span>
-          <span className="text-sm font-semibold text-cyan-400">X</span>
+          <span className="text-sm font-semibold text-white/80">X</span>
         </div>
       </div>
 
@@ -92,8 +88,8 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
               className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-hud font-bold transition-all ${
                 isSelected
                   ? isExtreme
-                    ? "bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105"
-                    : "bg-cyan-400 text-black shadow-lg shadow-cyan-400/30 scale-105"
+                    ? "bg-amber-400 text-black shadow-md scale-105"
+                    : "bg-white text-black shadow-md scale-105"
                   : "bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white"
               }`}
             >
@@ -122,7 +118,7 @@ export const ZoomControl: React.FC<Props> = ({ zoom, onZoomChange }) => {
         <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 text-xs font-hud animate-tripod-pulse">
           <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
           <span className="font-bold tracking-wide">USE TRIPOD</span>
-          <span className="text-gray-300 text-[11px] hidden sm:inline">| Auto 2s Stablizer Timer Active</span>
+          <span className="text-gray-300 text-[11px] hidden sm:inline">| 2s Stabilization Shutter Active</span>
         </div>
       )}
     </div>
