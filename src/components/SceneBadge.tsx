@@ -96,10 +96,12 @@ export const SceneBadge: React.FC<Props> = ({ scene, isAnalyzing, onTriggerScan 
           <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
             <div className="flex items-center gap-1.5">
               <Cpu className="w-4 h-4 text-cyan-400" />
-              <span className="font-hud text-xs font-bold text-white tracking-wider">GEMINI VISION NEURAL CORE</span>
+              <span className="font-hud text-xs font-bold text-white tracking-wider">
+                {scene.isFallback ? "ON-DEVICE CV ENGINE" : "GEMINI VISION NEURAL CORE"}
+              </span>
             </div>
             <span className="text-[10px] font-mono-hud text-gray-400">
-              Confidence: {Math.round(scene.confidence * 100)}%
+              {scene.isFallback ? "Local Processing" : `Confidence: ${Math.round(scene.confidence * 100)}%`}
             </span>
           </div>
 
@@ -140,7 +142,7 @@ export const SceneBadge: React.FC<Props> = ({ scene, isAnalyzing, onTriggerScan 
           </div>
 
           <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-gray-400">
-            <span>Model: Gemini 3.8 Flash Vision</span>
+            <span>{scene.isFallback ? "Engine: On-Device Heuristic CV" : "Model: Gemini 3.8 Flash Vision"}</span>
             <button
               onClick={() => onTriggerScan()}
               className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"

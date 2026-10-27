@@ -17,6 +17,8 @@ import {
   renderCameraPreview,
   applyShutterEnhancement,
 } from "./utils/cvEngine";
+import { classifySceneOffline } from "./utils/offlineSceneEngine";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import {
   playShutterSound,
   playTimerBeep,
@@ -183,8 +185,11 @@ export default function App() {
     startCamera(newFacing);
   };
 
+  // Connectivity & Offline mode status
+  const { isBrowserOnline, isForcedOffline, effectiveOnline, toggleForceOffline } = useOnlineStatus();
+
   /**
-   * 3. Gemini Vision API Scene Detection Trigger
+   * 3. Scene Detection Trigger (Online Gemini 3.8 Flash Vision + Offline Local CV Engine)
    */
   const triggerSceneAnalysis = useCallback(async () => {
     if (isAnalyzing) return;
@@ -201,8 +206,17 @@ export default function App() {
       if (!snapCtx) return;
 
       snapCtx.drawImage(canvas, 0, 0, snapCanvas.width, snapCanvas.height);
-      const base64 = snapCanvas.toDataURL("image/jpeg", 0.7);
 
+      if (!effectiveOnline) {
+        // Fast on-device offline computer vision
+        const imgData = snapCtx.getImageData(0, 0, snapCanvas.width, snapCanvas.height);
+        const offlineResult = classifySceneOffline(imgData, sharpnessScore, isBlurry);
+        setScene(offlineResult);
+        return;
+      }
+
+      // Online: Gemini 3.8 Flash Vision API
+      const base64 = snapCanvas.toDataURL("image/jpeg", 0.7);
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -214,11 +228,20 @@ export default function App() {
       const data: SceneAnalysis = await res.json();
       setScene(data);
     } catch (err) {
-      console.error("Gemini analysis error:", err);
+      console.warn("Falling back to on-device offline scene engine:", err);
+      // Graceful offline fallback
+      try {
+        const snapCtx = canvas.getContext("2d");
+        if (snapCtx) {
+          const imgData = snapCtx.getImageData(0, 0, Math.min(canvas.width, 400), Math.min(canvas.height, 400));
+          const offlineResult = classifySceneOffline(imgData, sharpnessScore, isBlurry);
+          setScene(offlineResult);
+        }
+      } catch {}
     } finally {
       setIsAnalyzing(false);
     }
-  }, [isAnalyzing]);
+  }, [isAnalyzing, effectiveOnline, sharpnessScore, isBlurry]);
 
   /**
    * 4. Viewfinder Tap (Tap to set focal point)
@@ -474,6 +497,10 @@ export default function App() {
           onSplitRatioChange={setSplitRatio}
           hasCameraError={Boolean(cameraError)}
           isUploadedImage={isUploadedMode}
+          isBrowserOnline={isBrowserOnline}
+          isForcedOffline={isForcedOffline}
+          effectiveOnline={effectiveOnline}
+          onToggleForceOffline={toggleForceOffline}
         />
 
         {/* Top AI Status Badge */}

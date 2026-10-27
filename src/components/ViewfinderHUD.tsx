@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Volume2, VolumeX, Grid } from "lucide-react";
 import { SceneAnalysis } from "../types/camera";
+import { ConnectivityBadge } from "./ConnectivityBadge";
 
 interface Props {
   scene: SceneAnalysis;
@@ -20,6 +21,10 @@ interface Props {
   onSplitRatioChange: (ratio: number) => void;
   hasCameraError: boolean;
   isUploadedImage: boolean;
+  isBrowserOnline: boolean;
+  isForcedOffline: boolean;
+  effectiveOnline: boolean;
+  onToggleForceOffline: () => void;
 }
 
 export const ViewfinderHUD: React.FC<Props> = ({
@@ -39,6 +44,10 @@ export const ViewfinderHUD: React.FC<Props> = ({
   splitRatio,
   onSplitRatioChange,
   isUploadedImage,
+  isBrowserOnline,
+  isForcedOffline,
+  effectiveOnline,
+  onToggleForceOffline,
 }) => {
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
 
@@ -106,6 +115,13 @@ export const ViewfinderHUD: React.FC<Props> = ({
 
         {/* Quick Utility Toggles */}
         <div className="flex items-center gap-1.5">
+          <ConnectivityBadge
+            isBrowserOnline={isBrowserOnline}
+            isForcedOffline={isForcedOffline}
+            effectiveOnline={effectiveOnline}
+            onToggleForceOffline={onToggleForceOffline}
+          />
+
           <button
             onClick={(e) => {
               e.stopPropagation();
